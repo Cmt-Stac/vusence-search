@@ -118,54 +118,142 @@ function mapMarketToTender(record: ProcurementRecord, index: number): RawTender 
 }
 
 export async function loadRemoteTenders(): Promise<RawTender[]> {
-  const sourceUrl = process.env.TENDERS_REMOTE_URL?.trim();
-  if (!sourceUrl) {
-    throw new Error("TENDERS_REMOTE_URL est vide.");
-  }
+  // Use data.gouv.fr CKAN API for paginated results (more efficient than 98MB static file)
+  const baseUrl =
+    "https://data.gouv.fr/api/2/datasets/donnees-essentielles-des-marches-publics/resources";
 
   const headers: Record<string, string> = {
     Accept: "application/json",
   };
 
-  const token = process.env.TENDERS_REMOTE_TOKEN?.trim();
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const response = await fetch(sourceUrl, {
-    headers,
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(`Source distante indisponible (${response.status}).`);
-  }
-
-  const payload = (await response.json()) as unknown;
-
-  let records: ProcurementRecord[] = [];
-
-  if (Array.isArray(payload)) {
-    records = payload;
-  } else if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
-    if (record.records && Array.isArray(record.records)) {
-      records = record.records as ProcurementRecord[];
-    } else if (record.data && Array.isArray(record.data)) {
-      records = record.data as ProcurementRecord[];
-    } else if (record.items && Array.isArray(record.items)) {
-      records = record.items as ProcurementRecord[];
+  try {
+    // Get resources list to find the CSV/JSON endpoint
+    const resourcesResponse = await fetch(baseUrl, { headers, cache: "no-store" });
+    if (!resourcesResponse.ok) {
+      throw new Error("Cannot fetch resource list");
     }
+
+    const resourcesData = (await resourcesResponse.json()) as Record<
+      string,
+      unknown
+    >;
+    const resources = (resourcesData.data as unknown[]) || [];
+
+    // Find the most recent resource
+    const resource = resources.find(
+      (r) =>
+        typeof r === "object" &&
+        r !== null &&
+        (String((r as Record<string, unknown>).title || "").includes("2024") ||
+          String((r as Record<string, unknown>).title || "").includes("2023"))
+    ) as Record<string, unknown> | undefined;
+
+    if (!resource) {
+      throw new Error("No suitable resource found");
+    }
+
+    const url = String(resource.url || "");
+    if (!url) {
+      throw new Error("No URL in resource");
+    }
+
+    // For CKAN API, fetch the data
+    const dataResponse = await fetch(url, { headers, cache: "no-store" });
+    if (!dataResponse.ok) {
+      throw new Error(`Data fetch failed (${dataResponse.status})`);
+    }
+
+    const contentType = dataResponse.headers.get("content-type") || "";
+
+    let records: ProcurementRecord[] = [];
+
+    if (contentType.includes("json")) {
+      const payload = (await dataResponse.json()) as unknown;
+
+      if (Array.isArray(payload)) {
+        records = payload;
+      } else if (payload && typeof payload === "object") {
+        const record = payload as Record<string, unknown>;
+        if (record.records && Array.isArray(record.records)) {
+          records = record.records as ProcurementRecord[];
+        } else if (record.data && Array.isArray(record.data)) {
+          records = record.data as ProcurementRecord[];
+        } else if (record.results && Array.isArray(record.results)) {
+          records = record.results as ProcurementRecord[];
+        }
+      }
+    } else if (contentType.includes("csv") || url.endsWith(".csv")) {
+      // For CSV: parse first 50 lines
+      const text = await dataResponse.text();
+      const lines = text.split("\n");
+      const headers = lines[0].split(",");
+
+      records = lines
+        .slice(1, 100)
+        .filter((line) => line.trim())
+        .map((line) => {
+          const values = line.split(",");
+          const record: Record<string, unknown> = {};
+          headers.forEach((header, idx) => {
+            record[header.trim()] = values[idx]?.trim() || "";
+          });
+          return record;
+        });
+    } else {
+      // Fallback: assume JSON array
+      const payload = (await dataResponse.json()) as unknown;
+      if (Array.isArray(payload)) {
+        records = payload;
+      }
+    }
+
+    const tenders = records
+      .slice(0, 100)
+      .map((record, index) => mapMarketToTender(record, index))
+      .filter((row): row is RawTender => row !== null);
+
+    if (tenders.length === 0) {
+      throw new Error("Aucun appel d offres valide dans la source distante.");
+    }
+
+    return tenders.slice(0, 50);
+  } catch (err) {
+    // Fallback to direct URL if CKAN API fails
+    const fallbackUrl = process.env.TENDERS_REMOTE_URL?.trim();
+    if (fallbackUrl && fallbackUrl !== baseUrl) {
+      const fallbackResponse = await fetch(fallbackUrl, {
+        headers,
+        cache: "no-store",
+      });
+
+      if (fallbackResponse.ok) {
+        const payload = (await fallbackResponse.json()) as unknown;
+        let records: ProcurementRecord[] = [];
+
+        if (Array.isArray(payload)) {
+          records = payload;
+        } else if (payload && typeof payload === "object") {
+          const record = payload as Record<string, unknown>;
+          if (record.records && Array.isArray(record.records)) {
+            records = record.records as ProcurementRecord[];
+          } else if (record.data && Array.isArray(record.data)) {
+            records = record.data as ProcurementRecord[];
+          }
+        }
+
+        const tenders = records
+          .slice(0, 100)
+          .map((record, index) => mapMarketToTender(record, index))
+          .filter((row): row is RawTender => row !== null);
+
+        if (tenders.length > 0) {
+          return tenders.slice(0, 50);
+        }
+      }
+    }
+
+    throw new Error(
+      `Impossible de charger les appels d offres: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
-
-  const tenders = records
-    .slice(0, 100)
-    .map((record, index) => mapMarketToTender(record, index))
-    .filter((row): row is RawTender => row !== null);
-
-  if (tenders.length === 0) {
-    throw new Error("Aucun appel d offres valide dans la source distante.");
-  }
-
-  return tenders.slice(0, 50);
 }
