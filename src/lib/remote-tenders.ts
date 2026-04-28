@@ -1,8 +1,8 @@
 import type { RawTender } from "@/types/tender";
 
 /**
- * Loader for French public procurement data from data.gouv.fr
- * Source: Donnees essentielles des marches publics
+ * Real French procurement data loader
+ * Primary: Direct import of real tenders data
  */
 
 type ProcurementRecord = Record<string, unknown>;
@@ -119,98 +119,68 @@ function mapMarketToTender(record: ProcurementRecord, index: number): RawTender 
 
 /**
  * Real French procurement data from multiple sources
- * Primary: Local real tenders data (from /public/real-tenders.json)
+ * Primary: Direct import of real tenders data
  */
 
 export async function loadRemoteTenders(): Promise<RawTender[]> {
-  // Try multiple real data sources in order
-  const dataSources = [
-    // Source 1: Local real tenders dataset (served from Vercel)
-    "/real-tenders.json",
-    
-    // Source 2: User-provided custom URL (environment variable)
-    process.env.TENDERS_REMOTE_URL?.trim(),
-  ].filter(Boolean);
+  // Dynamically import real tenders data
+  try {
+    const realTendersData = await import("@/data/real-tenders.json");
+    const records = (realTendersData.default || realTendersData) as ProcurementRecord[];
 
-  for (const sourceUrl of dataSources) {
-    if (!sourceUrl) continue;
+    if (Array.isArray(records) && records.length > 0) {
+      const tenders = records
+        .slice(0, 100)
+        .map((record, index) => mapMarketToTender(record, index))
+        .filter((row): row is RawTender => row !== null);
 
+      if (tenders.length > 0) {
+        return tenders.slice(0, 50);
+      }
+    }
+  } catch {
+    // Real tenders failed, try configured URL
+  }
+
+  // Fallback: Try user-provided custom URL
+  const sourceUrl = process.env.TENDERS_REMOTE_URL?.trim();
+  if (sourceUrl) {
     try {
       const response = await fetch(sourceUrl, {
         headers: { Accept: "application/json" },
         cache: "no-store",
       });
 
-      if (!response.ok) continue;
+      if (response.ok) {
+        const data = (await response.json()) as unknown;
+        let records: ProcurementRecord[] = [];
 
-      const data = (await response.json()) as unknown;
-      let records: ProcurementRecord[] = [];
-
-      // Try to extract records from various known formats
-      if (Array.isArray(data)) {
-        records = data;
-      } else if (data && typeof data === "object") {
-        const obj = data as Record<string, unknown>;
-
-        // data.gouv.fr formats
-        if (obj.data && Array.isArray(obj.data)) {
-          const items = obj.data as unknown[];
-          // If it's a resource list, find a data item
-          if (items.length > 0 && typeof items[0] === "object") {
-            const first = items[0] as Record<string, unknown>;
-            if (first.resources && Array.isArray(first.resources)) {
-              // This is a dataset, try to extract URLs
-              const resources = first.resources as unknown[];
-              for (const res of resources) {
-                if (
-                  res &&
-                  typeof res === "object" &&
-                  (res as Record<string, unknown>).url
-                ) {
-                  try {
-                    const dataUrl = String(
-                      (res as Record<string, unknown>).url
-                    );
-                    const dataRes = await fetch(dataUrl, { 
-                      cache: "no-store",
-                      headers: { Accept: "application/json" }
-                    });
-                    if (dataRes.ok) {
-                      const parsed = (await dataRes.json()) as unknown;
-                      if (Array.isArray(parsed)) {
-                        records = parsed;
-                        break;
-                      }
-                    }
-                  } catch {
-                    // Try next resource
-                  }
-                }
-              }
-            } else {
-              // Direct array of records
-              records = items as ProcurementRecord[];
-            }
+        if (Array.isArray(data)) {
+          records = data;
+        } else if (data && typeof data === "object") {
+          const obj = data as Record<string, unknown>;
+          if (obj.data && Array.isArray(obj.data)) {
+            records = obj.data as ProcurementRecord[];
+          } else if (obj.records && Array.isArray(obj.records)) {
+            records = obj.records as ProcurementRecord[];
+          } else if (obj.results && Array.isArray(obj.results)) {
+            records = obj.results as ProcurementRecord[];
           }
-        } else if (obj.records && Array.isArray(obj.records)) {
-          records = obj.records as ProcurementRecord[];
-        } else if (obj.results && Array.isArray(obj.results)) {
-          records = obj.results as ProcurementRecord[];
         }
-      }
 
-      if (records.length > 0) {
-        const tenders = records
-          .slice(0, 100)
-          .map((record, index) => mapMarketToTender(record, index))
-          .filter((row): row is RawTender => row !== null);
+        if (records.length > 0) {
+          const tenders = records
+            .slice(0, 100)
+            .map((record, index) => mapMarketToTender(record, index))
+            .filter((row): row is RawTender => row !== null);
 
-        if (tenders.length > 0) {
-          return tenders.slice(0, 50);
+          if (tenders.length > 0) {
+            return tenders.slice(0, 50);
+          }
         }
       }
     } catch {
-      // Try next source
+      // URL fetch failed
     }
   }
 
