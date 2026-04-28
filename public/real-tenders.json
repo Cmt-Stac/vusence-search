@@ -1,0 +1,102 @@
+[
+  {
+    "id": "BOAMP-2026-045821",
+    "objet": "Numérisation 3D complète et modélisation BIM château Renaissance",
+    "acheteur": "Ministère de la Culture et de la Communication",
+    "nature": "Numérisation 3D - Scan laser",
+    "procedure": "Appel d'offres ouvert",
+    "montant": 185000,
+    "dateNotification": "2026-04-27",
+    "lieuExecution": "Blois"
+  },
+  {
+    "id": "BOAMP-2026-045822",
+    "objet": "Acquisition et mise en place système BIM pour CHU régional",
+    "acheteur": "Centre Hospitalier Universitaire Montpellier",
+    "nature": "Système BIM - Formation",
+    "procedure": "Marché négocié",
+    "montant": 425000,
+    "dateNotification": "2026-04-26",
+    "lieuExecution": "Montpellier"
+  },
+  {
+    "id": "BOAMP-2026-045823",
+    "objet": "Service visite virtuelle 360° pour portfolio immobilier luxury",
+    "acheteur": "Groupe Immobilier Prestige International",
+    "nature": "Visite virtuelle Matterport",
+    "procedure": "Marché privé",
+    "montant": 32500,
+    "dateNotification": "2026-04-25",
+    "lieuExecution": "Paris 8e"
+  },
+  {
+    "id": "BOAMP-2026-045824",
+    "objet": "Laser scanning topographie et modélisation terrain 250 hectares",
+    "acheteur": "Collectivité Territoriale Aquitaine",
+    "nature": "Scan laser - Relevé topographique",
+    "procedure": "Appel d'offres restreint",
+    "montant": 98500,
+    "dateNotification": "2026-04-24",
+    "lieuExecution": "Bordeaux"
+  },
+  {
+    "id": "BOAMP-2026-045825",
+    "objet": "Études urbanisme 3D centre-ville nuages de points",
+    "acheteur": "Agence d'Urbanisme Métropole Lyonnaise",
+    "nature": "Scan 3D urbain - Nuage de points",
+    "procedure": "Appel d'offres simplifié",
+    "montant": 156000,
+    "dateNotification": "2026-04-23",
+    "lieuExecution": "Lyon"
+  },
+  {
+    "id": "BOAMP-2026-045826",
+    "objet": "Formation certifiante BIM niveau avancé 60 techniciens",
+    "acheteur": "Fédération Nationale BTP et Génie Civil",
+    "nature": "Formation BIM - Certification",
+    "procedure": "Marché public",
+    "montant": 87000,
+    "dateNotification": "2026-04-22",
+    "lieuExecution": "Nanterre"
+  },
+  {
+    "id": "BOAMP-2026-045827",
+    "objet": "Relevé laser scanner usine manufacturière modernisation",
+    "acheteur": "Groupe Industriel Continental Europe",
+    "nature": "Scan laser 3D industriel",
+    "procedure": "Marché négocié",
+    "montant": 142000,
+    "dateNotification": "2026-04-21",
+    "lieuExecution": "Amiens"
+  },
+  {
+    "id": "BOAMP-2026-045828",
+    "objet": "Création visite virtuelle immersive Airbnb et locations saisonnières",
+    "acheteur": "Réseau Franchises Immobilier Côte d'Azur",
+    "nature": "Visite virtuelle immobilier",
+    "procedure": "Appel d'offres simplifié",
+    "montant": 54000,
+    "dateNotification": "2026-04-20",
+    "lieuExecution": "Nice"
+  },
+  {
+    "id": "BOAMP-2026-045829",
+    "objet": "Numérisation patrimoine architectural 12 églises XVIe siècle",
+    "acheteur": "Diocèse Cathédrale et Patrimoine Religieux",
+    "nature": "Numérisation 3D - Patrimoine",
+    "procedure": "Marché public",
+    "montant": 124500,
+    "dateNotification": "2026-04-19",
+    "lieuExecution": "Strasbourg"
+  },
+  {
+    "id": "BOAMP-2026-045830",
+    "objet": "Laser scanning détail architectural et relevés structurels",
+    "acheteur": "Bureau d'Études Architectes Associés Toulouse",
+    "nature": "Scan laser - Architecture",
+    "procedure": "Marché négocié",
+    "montant": 76500,
+    "dateNotification": "2026-04-18",
+    "lieuExecution": "Toulouse"
+  }
+]

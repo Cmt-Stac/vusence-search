@@ -118,150 +118,103 @@ function mapMarketToTender(record: ProcurementRecord, index: number): RawTender 
 }
 
 /**
- * Real French procurement dataset demo
- * Based on actual BOAMP structures and formats
+ * Real French procurement data from multiple sources
+ * Primary: Local real tenders data (from /public/real-tenders.json)
  */
-const REAL_TENDERS_DEMO: ProcurementRecord[] = [
-  {
-    id: "MARCHEPUBLIC-2026-001",
-    objet: "Fourniture et installation de système BIM complet pour nouvelle gare TGV",
-    acheteur: { nom: "SNCF Réseau" },
-    nature: "Marché public",
-    procedure: "Appel d'offres ouvert",
-    montant: 2500000,
-    dateNotification: "2026-04-20",
-    lieuExecution: { nom: "Nantes" },
-  },
-  {
-    id: "MARCHEPUBLIC-2026-002",
-    objet: "Numérisation 3D et modélisation BIM du patrimoine architectural",
-    acheteur: { nom: "Ville de Lyon" },
-    nature: "Scan 3D",
-    procedure: "Marché négocié",
-    montant: 185000,
-    dateNotification: "2026-04-19",
-    lieuExecution: { nom: "Lyon" },
-  },
-  {
-    id: "MARCHEPUBLIC-2026-003",
-    objet: "Réalisation visite virtuelle 360° pour 50 monuments historiques",
-    acheteur: { nom: "Ministère de la Culture" },
-    nature: "Visite virtuelle Matterport",
-    procedure: "Appel d'offres simplifié",
-    montant: 320000,
-    dateNotification: "2026-04-18",
-    lieuExecution: { nom: "Paris" },
-  },
-  {
-    id: "MARCHEPUBLIC-2026-004",
-    objet: "Acquisition laser scanner et formation personnel",
-    acheteur: { nom: "Géomètre Conseil" },
-    nature: "Équipement",
-    procedure: "Marché public",
-    montant: 95000,
-    dateNotification: "2026-04-17",
-    lieuExecution: { nom: "Marseille" },
-  },
-  {
-    id: "MARCHEPUBLIC-2026-005",
-    objet: "Service visite virtuelle immobilier pour agences premium",
-    acheteur: { nom: "Agence Immobilière Prestige" },
-    nature: "Visite virtuelle immobilier",
-    procedure: "Marché privé référencé",
-    montant: 45000,
-    dateNotification: "2026-04-16",
-    lieuExecution: { nom: "Bordeaux" },
-  },
-  {
-    id: "MARCHEPUBLIC-2026-006",
-    objet: "Modélisation BIM bâtiments administratifs région Hauts-de-France",
-    acheteur: { nom: "Région Hauts-de-France" },
-    nature: "BIM modeling",
-    procedure: "Appel d'offres restreint",
-    montant: 420000,
-    dateNotification: "2026-04-15",
-    lieuExecution: { nom: "Lille" },
-  },
-  {
-    id: "MARCHEPUBLIC-2026-007",
-    objet: "Étude urbanisme 3D centre-ville avec relevés laser",
-    acheteur: { nom: "Agence Urbaine Métropole" },
-    nature: "Scan 3D urbanisme",
-    procedure: "Marché négocié",
-    montant: 275000,
-    dateNotification: "2026-04-14",
-    lieuExecution: { nom: "Toulouse" },
-  },
-  {
-    id: "MARCHEPUBLIC-2026-008",
-    objet: "Formation BIM avancé pour 100 techniciens immobiliers",
-    acheteur: { nom: "Fédération Immobilière France" },
-    nature: "Formation BIM",
-    procedure: "Appel d'offres simplifié",
-    montant: 125000,
-    dateNotification: "2026-04-13",
-    lieuExecution: { nom: "Montpellier" },
-  },
-];
 
 export async function loadRemoteTenders(): Promise<RawTender[]> {
-  // Try to load from configured remote URL if available
-  const sourceUrl = process.env.TENDERS_REMOTE_URL?.trim();
-  
-  if (sourceUrl) {
-    try {
-      const headers: Record<string, string> = { Accept: "application/json" };
-      const token = process.env.TENDERS_REMOTE_TOKEN?.trim();
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
+  // Try multiple real data sources in order
+  const dataSources = [
+    // Source 1: Local real tenders dataset (served from Vercel)
+    "/real-tenders.json",
+    
+    // Source 2: User-provided custom URL (environment variable)
+    process.env.TENDERS_REMOTE_URL?.trim(),
+  ].filter(Boolean);
 
+  for (const sourceUrl of dataSources) {
+    if (!sourceUrl) continue;
+
+    try {
       const response = await fetch(sourceUrl, {
-        headers,
+        headers: { Accept: "application/json" },
         cache: "no-store",
       });
 
-      if (response.ok) {
-        const payload = (await response.json()) as unknown;
-        let records: ProcurementRecord[] = [];
+      if (!response.ok) continue;
 
-        if (Array.isArray(payload)) {
-          records = payload;
-        } else if (payload && typeof payload === "object") {
-          const record = payload as Record<string, unknown>;
-          if (record.records && Array.isArray(record.records)) {
-            records = record.records as ProcurementRecord[];
-          } else if (record.data && Array.isArray(record.data)) {
-            records = record.data as ProcurementRecord[];
-          } else if (record.results && Array.isArray(record.results)) {
-            records = record.results as ProcurementRecord[];
+      const data = (await response.json()) as unknown;
+      let records: ProcurementRecord[] = [];
+
+      // Try to extract records from various known formats
+      if (Array.isArray(data)) {
+        records = data;
+      } else if (data && typeof data === "object") {
+        const obj = data as Record<string, unknown>;
+
+        // data.gouv.fr formats
+        if (obj.data && Array.isArray(obj.data)) {
+          const items = obj.data as unknown[];
+          // If it's a resource list, find a data item
+          if (items.length > 0 && typeof items[0] === "object") {
+            const first = items[0] as Record<string, unknown>;
+            if (first.resources && Array.isArray(first.resources)) {
+              // This is a dataset, try to extract URLs
+              const resources = first.resources as unknown[];
+              for (const res of resources) {
+                if (
+                  res &&
+                  typeof res === "object" &&
+                  (res as Record<string, unknown>).url
+                ) {
+                  try {
+                    const dataUrl = String(
+                      (res as Record<string, unknown>).url
+                    );
+                    const dataRes = await fetch(dataUrl, { 
+                      cache: "no-store",
+                      headers: { Accept: "application/json" }
+                    });
+                    if (dataRes.ok) {
+                      const parsed = (await dataRes.json()) as unknown;
+                      if (Array.isArray(parsed)) {
+                        records = parsed;
+                        break;
+                      }
+                    }
+                  } catch {
+                    // Try next resource
+                  }
+                }
+              }
+            } else {
+              // Direct array of records
+              records = items as ProcurementRecord[];
+            }
           }
+        } else if (obj.records && Array.isArray(obj.records)) {
+          records = obj.records as ProcurementRecord[];
+        } else if (obj.results && Array.isArray(obj.results)) {
+          records = obj.results as ProcurementRecord[];
         }
+      }
 
-        if (records.length > 0) {
-          const tenders = records
-            .slice(0, 100)
-            .map((record, index) => mapMarketToTender(record, index))
-            .filter((row): row is RawTender => row !== null);
+      if (records.length > 0) {
+        const tenders = records
+          .slice(0, 100)
+          .map((record, index) => mapMarketToTender(record, index))
+          .filter((row): row is RawTender => row !== null);
 
-          if (tenders.length > 0) {
-            return tenders.slice(0, 50);
-          }
+        if (tenders.length > 0) {
+          return tenders.slice(0, 50);
         }
       }
     } catch {
-      // Fall through to demo data
+      // Try next source
     }
   }
 
-  // Use demo real-world data as fallback
-  const tenders = REAL_TENDERS_DEMO.map((record, index) =>
-    mapMarketToTender(record, index)
-  ).filter((row): row is RawTender => row !== null);
-
-  if (tenders.length === 0) {
-    throw new Error("Impossible de charger les appels d offres");
-  }
-
-  return tenders;
+  throw new Error(
+    "Impossible de charger les appels d'offres. Vérifiez votre configuration."
+  );
 }
