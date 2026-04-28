@@ -9,6 +9,10 @@ type ApiResponse = {
   updatedAt: string;
   total: number;
   data: Tender[];
+  source?: {
+    mode: "mock" | "remote";
+    note: string;
+  };
 };
 
 type DevisResponse = {
@@ -54,6 +58,7 @@ export default function Home() {
   const [stateUpdatedAt, setStateUpdatedAt] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sourceInfo, setSourceInfo] = useState<string>("Source mock (simulation).");
 
   const appPassword = process.env.NEXT_PUBLIC_APP_PASSWORD?.trim() ?? "";
   const [isUnlocked, setIsUnlocked] = useState(appPassword.length === 0);
@@ -76,6 +81,7 @@ export default function Home() {
       const payload = (await response.json()) as ApiResponse;
       setTenders(payload.data);
       setUpdatedAt(payload.updatedAt);
+      setSourceInfo(payload.source?.note ?? "Source mock (simulation).");
     } catch (err) {
       const message =
         err instanceof Error
@@ -301,6 +307,7 @@ export default function Home() {
               ? `Etat local: ${dateFormatter.format(new Date(stateUpdatedAt))}`
               : "Etat local non charge"}
           </div>
+          <div className="chip">{sourceInfo}</div>
         </div>
       </section>
 

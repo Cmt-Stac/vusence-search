@@ -6,7 +6,7 @@ Application web autonome de veille d appels d offres, concue pour un usage perso
 
 - Next.js (App Router)
 - API Routes (backend integre)
-- Donnees locales mock (aucune connexion externe)
+- Donnees locales mock + mode source reelle configurable
 
 ## Fonctionnalites V1
 
@@ -31,6 +31,45 @@ Application web autonome de veille d appels d offres, concue pour un usage perso
 - Couche de connecteur: src/lib/devis-connector.ts
 - Mode par defaut: mock (retourne "Fonction a venir")
 - Aucun appel externe n est effectue
+
+## V2 Source reelle (optionnel)
+
+Le projet peut consommer une source reelle sans scraping via l API interne /api/tenders.
+
+Variables a definir dans .env.local:
+
+TENDERS_SOURCE_MODE=remote
+TENDERS_REMOTE_URL=https://votre-source-officielle/api/tenders
+TENDERS_REMOTE_TOKEN=optionnel
+
+Si la source distante est indisponible ou invalide, l application bascule automatiquement en mode mock.
+
+Formats acceptes pour la source distante:
+
+- JSON array direct
+- ou objet JSON contenant un tableau dans data, items, results ou value
+
+Champs reconnus par ligne (mapping tolerant):
+
+- id/reference/ref/numero/uid
+- title/titre/name/objet
+- description/resume/summary/details
+- city/ville/location/commune
+- budget/amount/montant/estimatedValue
+- publicationDate/date/published_at/publishedAt
+- keywords/tags/mots_cles/motcles
+
+Exemple minimal d element JSON:
+
+{
+	"id": "AO-2026-0001",
+	"title": "Mission BIM et scan 3D",
+	"description": "Releve et modelisation 3D",
+	"city": "Lyon",
+	"budget": 25000,
+	"publicationDate": "2026-04-28",
+	"keywords": ["BIM", "scan 3D"]
+}
 
 ## Lancer en local
 
