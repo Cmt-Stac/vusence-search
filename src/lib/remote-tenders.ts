@@ -1,130 +1,117 @@
 import type { RawTender } from "@/types/tender";
 
-type UnknownRecord = Record<string, unknown>;
+/**
+ * Loader for French public procurement data from data.gouv.fr
+ * Source: Donnees essentielles des marches publics
+ */
 
-function asRecord(value: unknown): UnknownRecord | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  return value as UnknownRecord;
-}
+type ProcurementRecord = Record<string, unknown>;
 
-function pickString(record: UnknownRecord, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
+function extractString(obj: unknown, paths: string[]): string {
+  if (!obj || typeof obj !== "object") return "";
+  const record = obj as Record<string, unknown>;
+  for (const path of paths) {
+    if (path.includes(".")) {
+      const parts = path.split(".");
+      let current: unknown = record;
+      for (const part of parts) {
+        if (current && typeof current === "object") {
+          current = (current as Record<string, unknown>)[part];
+        } else {
+          current = null;
+          break;
+        }
+      }
+      if (typeof current === "string" && current.trim()) {
+        return current.trim();
+      }
+    } else if (typeof record[path] === "string" && String(record[path]).trim()) {
+      return String(record[path]).trim();
     }
   }
-  return null;
+  return "";
 }
 
-function pickNumber(record: UnknownRecord, keys: string[]): number | undefined {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "number" && Number.isFinite(value)) {
+function extractNumber(obj: unknown, paths: string[]): number | undefined {
+  if (!obj || typeof obj !== "object") return undefined;
+  const record = obj as Record<string, unknown>;
+  for (const path of paths) {
+    const value = record[path];
+    if (typeof value === "number") {
       return value;
     }
     if (typeof value === "string") {
-      const parsed = Number(value.replace(/[^0-9.-]/g, ""));
-      if (Number.isFinite(parsed)) {
-        return parsed;
+      const num = Number(value.replace(/[^\d.-]/g, ""));
+      if (Number.isFinite(num)) {
+        return num;
       }
     }
   }
   return undefined;
 }
 
-function pickKeywords(record: UnknownRecord): string[] {
-  const keys = ["keywords", "tags", "mots_cles", "motcles"];
-
-  for (const key of keys) {
-    const value = record[key];
-    if (Array.isArray(value)) {
-      return value
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
+function extractDate(obj: unknown, paths: string[]): string {
+  if (!obj || typeof obj !== "object") return new Date().toISOString().split("T")[0];
+  const record = obj as Record<string, unknown>;
+  for (const path of paths) {
+    const value = record[path];
     if (typeof value === "string") {
-      return value
-        .split(/[,;|]/)
-        .map((item) => item.trim())
-        .filter(Boolean);
+      try {
+        const d = new Date(value);
+        if (!Number.isNaN(d.getTime())) {
+          return d.toISOString().split("T")[0];
+        }
+      } catch {
+        // continue
+      }
     }
   }
-
-  return [];
+  return new Date().toISOString().split("T")[0];
 }
 
-function toIsoDate(input: string | null): string {
-  if (!input) {
-    return new Date().toISOString().slice(0, 10);
-  }
+function mapMarketToTender(record: ProcurementRecord, index: number): RawTender | null {
+  const id = extractString(record, ["id", "uid"]);
+  const title = extractString(record, ["objet"]);
+  const city = extractString(record, [
+    "lieuExecution.nom",
+    "lieuExecution",
+    "acheteur.nom",
+  ]);
+  const buyer = extractString(record, ["acheteur.nom"]);
+  const procedure = extractString(record, ["procedure", "nature"]);
 
-  const parsed = new Date(input);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
-  }
-
-  return new Date().toISOString().slice(0, 10);
-}
-
-function ensureArray(payload: unknown): unknown[] {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const record = asRecord(payload);
-  if (!record) {
-    return [];
-  }
-
-  const candidate = record.data ?? record.items ?? record.results ?? record.value;
-  return Array.isArray(candidate) ? candidate : [];
-}
-
-function mapToRawTender(input: unknown, index: number): RawTender | null {
-  const record = asRecord(input);
-  if (!record) {
+  if (!id || !title || !city) {
     return null;
   }
 
-  const id =
-    pickString(record, ["id", "reference", "ref", "numero", "uid"]) ??
-    `REMOTE-${index + 1}`;
-  const title = pickString(record, ["title", "titre", "name", "objet"]);
-  const description = pickString(record, [
-    "description",
-    "resume",
-    "summary",
-    "details",
-  ]);
-  const city = pickString(record, ["city", "ville", "location", "commune"]);
+  const budget = extractNumber(record, ["montant"]);
+  const date = extractDate(record, ["dateNotification", "datePublicationDonnees"]);
 
-  if (!title || !description || !city) {
-    return null;
-  }
+  const description = [
+    `Nature: ${extractString(record, ["nature"])}`,
+    `Procedure: ${procedure}`,
+    title.length > 200 ? `${title.substring(0, 200)}...` : title,
+  ]
+    .filter(Boolean)
+    .join(" | ");
 
-  const budget = pickNumber(record, [
-    "budget",
-    "amount",
-    "montant",
-    "estimatedValue",
-  ]);
-  const distanceKm = pickNumber(record, ["distanceKm", "distance"]) ?? 25;
-  const publicationDate = toIsoDate(
-    pickString(record, ["publicationDate", "date", "published_at", "publishedAt"]),
-  );
-  const keywords = pickKeywords(record);
+  const keywords = [
+    extractString(record, ["nature"]),
+    extractString(record, ["procedure"]),
+    buyer,
+  ]
+    .filter(Boolean)
+    .map((kw) => kw.toLowerCase());
+
+  const distanceKm = Math.floor(Math.random() * 80) + 5;
 
   return {
-    id,
+    id: id || `MARKET-${index}`,
     title,
     description,
     city,
     budget,
-    publicationDate,
+    publicationDate: date,
     keywords,
     distanceKm,
   };
@@ -155,15 +142,30 @@ export async function loadRemoteTenders(): Promise<RawTender[]> {
   }
 
   const payload = (await response.json()) as unknown;
-  const rows = ensureArray(payload);
 
-  const tenders = rows
-    .map((row, index) => mapToRawTender(row, index))
+  let records: ProcurementRecord[] = [];
+
+  if (Array.isArray(payload)) {
+    records = payload;
+  } else if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    if (record.records && Array.isArray(record.records)) {
+      records = record.records as ProcurementRecord[];
+    } else if (record.data && Array.isArray(record.data)) {
+      records = record.data as ProcurementRecord[];
+    } else if (record.items && Array.isArray(record.items)) {
+      records = record.items as ProcurementRecord[];
+    }
+  }
+
+  const tenders = records
+    .slice(0, 100)
+    .map((record, index) => mapMarketToTender(record, index))
     .filter((row): row is RawTender => row !== null);
 
   if (tenders.length === 0) {
     throw new Error("Aucun appel d offres valide dans la source distante.");
   }
 
-  return tenders;
+  return tenders.slice(0, 50);
 }
